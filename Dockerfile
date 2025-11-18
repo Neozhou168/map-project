@@ -24,5 +24,5 @@ RUN mkdir -p downloads
 # Expose port
 EXPOSE 8080
 
-# Just bind to port 8080 - Railway will handle the rest!
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# Increase timeout to 1200 seconds (20 minutes) for very large file processing
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "1200", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
