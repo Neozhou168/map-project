@@ -227,13 +227,10 @@ def process_venue_file(input_path: str, output_dir: str):
                 location_type = google_result['location_type']
                 formatted_address = google_result['formatted_address']
                 
-                # Check if Google's result is reliable
-                is_approximate = (location_type == "APPROXIMATE")
-                venue_in_address = place.lower() in formatted_address.lower()
-                
-                if is_approximate or not venue_in_address:
-                    print(f"  Google result not specific (type: {location_type}, venue in address: {venue_in_address})")
-                    print(f"  Google says: {formatted_address}")
+                # Only fallback to Amap if Google's result is truly approximate
+                # Don't check venue name in address because Google returns English names
+                if location_type == "APPROXIMATE":
+                    print(f"  Google result is APPROXIMATE: {formatted_address}")
                     print(f"  Trying Amap for more specific location...")
                     
                     amap_result = get_amap_address(full_name)
@@ -246,12 +243,12 @@ def process_venue_file(input_path: str, output_dir: str):
                         print(f"  Found on Amap: {address}")
                         print(f"  Amap coordinates (GCJ-02): {amap_lat}, {amap_lng}")
                         
-                        # Convert from GCJ-02 (Amap) to WGS-84 (Google Maps)
-                        google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
-                        print(f"  Google coordinates (WGS-84): {google_lat}, {google_lng}")
+                        # Use the Chinese address for Google Maps URLs instead of coordinates
+                        # Google's geocoding is better at finding Chinese addresses than coordinate conversion
+                        direct, embed = build_google_urls_from_address(address)
                         
-                        # Use converted coordinates for both Google Maps URLs and KML
-                        direct, embed = build_google_urls(google_lat, google_lng)
+                        # Convert coordinates for KML file (for visualization)
+                        google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
                         coords_for_kml.append((google_lat, google_lng, full_name))
                     else:
                         # Amap also failed - skip this venue entirely
@@ -259,6 +256,7 @@ def process_venue_file(input_path: str, output_dir: str):
                         direct, embed = "", ""
                         # Don't add to coords_for_kml
                 else:
+                    # Google found it with good precision (ROOFTOP, RANGE_INTERPOLATED, GEOMETRIC_CENTER)
                     print(f"  Found on Google with {location_type} precision")
                     print(f"  Address: {formatted_address}")
                     lat = google_result['lat']
@@ -277,12 +275,12 @@ def process_venue_file(input_path: str, output_dir: str):
                     print(f"  Found on Amap: {address}")
                     print(f"  Amap coordinates (GCJ-02): {amap_lat}, {amap_lng}")
                     
-                    # Convert from GCJ-02 (Amap) to WGS-84 (Google Maps)
-                    google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
-                    print(f"  Google coordinates (WGS-84): {google_lat}, {google_lng}")
+                    # Use the Chinese address for Google Maps URLs instead of coordinates
+                    # Google's geocoding is better at finding Chinese addresses than coordinate conversion
+                    direct, embed = build_google_urls_from_address(address)
                     
-                    # Use converted coordinates for both Google Maps URLs and KML
-                    direct, embed = build_google_urls(google_lat, google_lng)
+                    # Convert coordinates for KML file (for visualization)
+                    google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
                     coords_for_kml.append((google_lat, google_lng, full_name))
                 else:
                     print(f"  Could not find: {full_name}")
