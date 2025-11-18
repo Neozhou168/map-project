@@ -7,51 +7,6 @@ from urllib.parse import quote
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')
 AMAP_API_KEY = os.environ.get('AMAP_API_KEY', '')
 
-def gcj02_to_wgs84(gcj_lat, gcj_lng):
-    """
-    Convert GCJ-02 coordinates (Amap) to WGS-84 coordinates (Google Maps)
-    
-    GCJ-02 is the coordinate system used by Chinese maps (Amap, Baidu, etc.)
-    WGS-84 is the international GPS standard used by Google Maps
-    
-    The difference can be 50-500 meters, so conversion is important!
-    """
-    import math
-    
-    # Constants for conversion
-    a = 6378245.0  # Semi-major axis of ellipsoid
-    ee = 0.00669342162296594323  # Flattening of ellipsoid
-    
-    def transform_lat(lng, lat):
-        ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
-        ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
-        ret += (20.0 * math.sin(lat * math.pi) + 40.0 * math.sin(lat / 3.0 * math.pi)) * 2.0 / 3.0
-        ret += (160.0 * math.sin(lat / 12.0 * math.pi) + 320 * math.sin(lat * math.pi / 30.0)) * 2.0 / 3.0
-        return ret
-    
-    def transform_lng(lng, lat):
-        ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
-        ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
-        ret += (20.0 * math.sin(lng * math.pi) + 40.0 * math.sin(lng / 3.0 * math.pi)) * 2.0 / 3.0
-        ret += (150.0 * math.sin(lng / 12.0 * math.pi) + 300.0 * math.sin(lng / 30.0 * math.pi)) * 2.0 / 3.0
-        return ret
-    
-    # Convert to radians
-    dlat = transform_lat(gcj_lng - 105.0, gcj_lat - 35.0)
-    dlng = transform_lng(gcj_lng - 105.0, gcj_lat - 35.0)
-    radlat = gcj_lat / 180.0 * math.pi
-    magic = math.sin(radlat)
-    magic = 1 - ee * magic * magic
-    sqrtmagic = math.sqrt(magic)
-    dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * math.pi)
-    dlng = (dlng * 180.0) / (a / sqrtmagic * math.cos(radlat) * math.pi)
-    
-    # Calculate WGS-84 coordinates
-    wgs_lat = gcj_lat - dlat
-    wgs_lng = gcj_lng - dlng
-    
-    return wgs_lat, wgs_lng
-
 def geocode_google(address: str):
     """Use Google Geocoding API to get coordinates and quality info"""
     if not GOOGLE_API_KEY:
@@ -68,12 +23,14 @@ def geocode_google(address: str):
             loc = result["geometry"]["location"]
             location_type = result["geometry"].get("location_type", "UNKNOWN")
             formatted_address = result.get("formatted_address", "")
+            place_id = result.get("place_id", "")
             
             return {
                 'lat': loc["lat"],
                 'lng': loc["lng"],
                 'location_type': location_type,
-                'formatted_address': formatted_address
+                'formatted_address': formatted_address,
+                'place_id': place_id
             }
     except Exception as e:
         print(f"Google geocoding error: {e}")
@@ -81,7 +38,7 @@ def geocode_google(address: str):
     return None
 
 def get_amap_address(keywords: str):
-    """Use Amap Place Search API to get address and coordinates in Chinese"""
+    """Use Amap Place Search API to get Chinese address (coordinates will be obtained from Google)"""
     if not AMAP_API_KEY:
         print(f"  Amap API key not found!")
         return None
@@ -227,8 +184,7 @@ def process_venue_file(input_path: str, output_dir: str):
                 location_type = google_result['location_type']
                 formatted_address = google_result['formatted_address']
                 
-                # Only fallback to Amap if Google's result is truly approximate
-                # Don't check venue name in address because Google returns English names
+                # Only fallback to Amap if Google's result is APPROXIMATE
                 if location_type == "APPROXIMATE":
                     print(f"  Google result is APPROXIMATE: {formatted_address}")
                     print(f"  Trying Amap for more specific location...")
@@ -237,19 +193,23 @@ def process_venue_file(input_path: str, output_dir: str):
                     
                     if amap_result:
                         address = amap_result['address']
-                        amap_lat = amap_result['lat']
-                        amap_lng = amap_result['lng']
                         
                         print(f"  Found on Amap: {address}")
-                        print(f"  Amap coordinates (GCJ-02): {amap_lat}, {amap_lng}")
                         
-                        # Use the Chinese address for Google Maps URLs instead of coordinates
-                        # Google's geocoding is better at finding Chinese addresses than coordinate conversion
+                        # Geocode the Chinese address through Google to get Google coordinates
+                        print(f"  Geocoding Chinese address through Google...")
+                        google_from_chinese = geocode_google(address)
+                        
+                        if google_from_chinese:
+                            lat = google_from_chinese['lat']
+                            lng = google_from_chinese['lng']
+                            print(f"  Google coordinates from Chinese address: {lat}, {lng}")
+                            coords_for_kml.append((lat, lng, full_name))
+                        else:
+                            print(f"  Google could not geocode Chinese address")
+                        
+                        # Use the Chinese address for Google Maps URLs
                         direct, embed = build_google_urls_from_address(address)
-                        
-                        # Convert coordinates for KML file (for visualization)
-                        google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
-                        coords_for_kml.append((google_lat, google_lng, full_name))
                     else:
                         # Amap also failed - skip this venue entirely
                         print(f"  Amap also failed, skipping this venue (no KML, no URLs)")
@@ -261,7 +221,6 @@ def process_venue_file(input_path: str, output_dir: str):
                     print(f"  Address: {formatted_address}")
                     lat = google_result['lat']
                     lng = google_result['lng']
-                    # Use formatted_address instead of coordinates so Google Maps shows the English name
                     address = formatted_address
                     direct, embed = build_google_urls_from_address(formatted_address)
                     coords_for_kml.append((lat, lng, full_name))
@@ -271,19 +230,23 @@ def process_venue_file(input_path: str, output_dir: str):
                 
                 if amap_result:
                     address = amap_result['address']
-                    amap_lat = amap_result['lat']
-                    amap_lng = amap_result['lng']
                     
                     print(f"  Found on Amap: {address}")
-                    print(f"  Amap coordinates (GCJ-02): {amap_lat}, {amap_lng}")
                     
-                    # Use the Chinese address for Google Maps URLs instead of coordinates
-                    # Google's geocoding is better at finding Chinese addresses than coordinate conversion
+                    # Geocode the Chinese address through Google to get Google coordinates
+                    print(f"  Geocoding Chinese address through Google...")
+                    google_from_chinese = geocode_google(address)
+                    
+                    if google_from_chinese:
+                        lat = google_from_chinese['lat']
+                        lng = google_from_chinese['lng']
+                        print(f"  Google coordinates from Chinese address: {lat}, {lng}")
+                        coords_for_kml.append((lat, lng, full_name))
+                    else:
+                        print(f"  Google could not geocode Chinese address")
+                    
+                    # Use the Chinese address for Google Maps URLs
                     direct, embed = build_google_urls_from_address(address)
-                    
-                    # Convert coordinates for KML file (for visualization)
-                    google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
-                    coords_for_kml.append((google_lat, google_lng, full_name))
                 else:
                     print(f"  Could not find: {full_name}")
                     direct, embed = "", ""
@@ -292,9 +255,22 @@ def process_venue_file(input_path: str, output_dir: str):
             direct_urls.append(direct)
             embed_urls.append(embed)
         
-        df["address"] = address_list
-        df["google_direct_url"] = direct_urls
-        df["google_embed_url"] = embed_urls
+        # ============================================================
+        # WORKFLOW REQUIREMENT: Output must have ONLY these 5 columns
+        # in this exact order:
+        # 1. city
+        # 2. venue
+        # 3. address
+        # 4. google_maps_direct_url
+        # 5. google_maps_embed_url
+        # ============================================================
+        output_df = pd.DataFrame({
+            'city': df[city_col],
+            'venue': df[place_col],
+            'address': address_list,
+            'google_maps_direct_url': direct_urls,
+            'google_maps_embed_url': embed_urls
+        })
         
         base_name = os.path.basename(input_path).replace(".xlsx", "").replace(".xls", "")
         excel_filename = f"{base_name}_output.xlsx"
@@ -303,7 +279,7 @@ def process_venue_file(input_path: str, output_dir: str):
         excel_path = os.path.join(output_dir, excel_filename)
         kml_path = os.path.join(output_dir, kml_filename)
         
-        df.to_excel(excel_path, index=False)
+        output_df.to_excel(excel_path, index=False)
         print(f"Generated: {excel_path}")
         
         placemarks = []
