@@ -1,13 +1,21 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
-from flask import Flask, request, render_template, send_file, flash
+from flask import Flask, request, render_template, send_file, flash, send_from_directory, session
 from werkzeug.utils import secure_filename
 import tempfile
 import shutil
 from utils import process_venue_file
+import uuid
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Create a persistent downloads directory
+DOWNLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'downloads')
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
@@ -47,13 +55,33 @@ def process():
         result = process_venue_file(input_path, temp_dir)
         
         if result['success']:
-            # Send the Excel file (KML will be downloaded separately)
+            # Generate unique session ID for this upload
+            session_id = str(uuid.uuid4())
+            session_folder = os.path.join(DOWNLOAD_FOLDER, session_id)
+            os.makedirs(session_folder, exist_ok=True)
+            
+            # Copy output files to persistent download folder
+            excel_src = result['excel_path']
+            kml_src = result['kml_path']
+            excel_dst = os.path.join(session_folder, result['excel_filename'])
+            kml_dst = os.path.join(session_folder, result['kml_filename'])
+            
+            shutil.copy2(excel_src, excel_dst)
+            shutil.copy2(kml_src, kml_dst)
+            
+            # Clean up temp directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            # Store session info
+            session['download_folder'] = session_id
+            
+            # Return result page with simplified file names
             return render_template('result.html', 
                                  excel_file=result['excel_filename'],
                                  kml_file=result['kml_filename'],
-                                 excel_path=result['excel_path'],
-                                 kml_path=result['kml_path'])
+                                 session_id=session_id)
         else:
+            shutil.rmtree(temp_dir, ignore_errors=True)
             return render_template('index.html', error=result['error']), 400
             
     except Exception as e:
@@ -61,10 +89,15 @@ def process():
             shutil.rmtree(temp_dir, ignore_errors=True)
         return render_template('index.html', error=f'Error processing file: {str(e)}'), 500
 
-@app.route('/download/<path:filepath>')
-def download(filepath):
+@app.route('/download/<session_id>/<filename>')
+def download(session_id, filename):
     try:
-        return send_file(filepath, as_attachment=True)
+        file_path = os.path.join(DOWNLOAD_FOLDER, session_id, filename)
+        
+        if not os.path.exists(file_path):
+            return f'Error: File not found', 404
+        
+        return send_file(file_path, as_attachment=True, download_name=filename)
     except Exception as e:
         return f'Error downloading file: {str(e)}', 500
 

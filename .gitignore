@@ -51,3 +51,6 @@ places/
 
 # Uploaded files
 uploads/
+
+# Generated downloads
+downloads/
