@@ -261,9 +261,7 @@ def process_venue_file(input_path: str, output_dir: str):
                     print(f"  Address: {formatted_address}")
                     lat = google_result['lat']
                     lng = google_result['lng']
-                    # Use formatted_address instead of coordinates so Google Maps shows the English name
-                    address = formatted_address
-                    direct, embed = build_google_urls_from_address(formatted_address)
+                    direct, embed = build_google_urls(lat, lng)
                     coords_for_kml.append((lat, lng, full_name))
             else:
                 print(f"  Google failed, trying Amap...")
