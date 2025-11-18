@@ -28,4 +28,4 @@ RUN mkdir -p downloads
 EXPOSE 5000
 
 # Run the application using startup script
-CMD ["./start.sh"]
+CMD ["/bin/sh", "./start.sh"]
