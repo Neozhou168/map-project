@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+downloads/
+uploads/
+*.xlsx
+*.xls
+*.kml
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md
+!README.md
+
+# Tests
+test_*.py
+create_test_file.py
