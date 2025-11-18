@@ -2,14 +2,13 @@ import os
 import requests
 import pandas as pd
 from urllib.parse import quote
-from openpyxl import load_workbook
 
 # ====== API Keys - Should be set as environment variables ======
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')
 AMAP_API_KEY = os.environ.get('AMAP_API_KEY', '')
 
 def geocode_google(address: str):
-    """Use Google Geocoding API to get coordinates"""
+    """Use Google Geocoding API to get coordinates and quality info"""
     if not GOOGLE_API_KEY:
         return None
     
@@ -20,8 +19,17 @@ def geocode_google(address: str):
         r = requests.get(url, params=params, timeout=10)
         data = r.json()
         if data.get("status") == "OK" and data.get("results"):
-            loc = data["results"][0]["geometry"]["location"]
-            return loc["lat"], loc["lng"]
+            result = data["results"][0]
+            loc = result["geometry"]["location"]
+            location_type = result["geometry"].get("location_type", "UNKNOWN")
+            formatted_address = result.get("formatted_address", "")
+            
+            return {
+                'lat': loc["lat"],
+                'lng': loc["lng"],
+                'location_type': location_type,
+                'formatted_address': formatted_address
+            }
     except Exception as e:
         print(f"Google geocoding error: {e}")
     
@@ -33,41 +41,35 @@ def get_amap_address(keywords: str):
         return None
     
     url = "https://restapi.amap.com/v3/place/text"
-    # Ensure we get Chinese results by setting output format and encoding
     params = {
         "keywords": keywords,
         "key": AMAP_API_KEY,
-        "output": "json",  # JSON output format
-        "city": "",  # Search across all cities (or could be specific city code)
+        "output": "json",
+        "city": "",
     }
     
     try:
-        # Ensure proper encoding for Chinese characters
         r = requests.get(url, params=params, timeout=10)
-        r.encoding = 'utf-8'  # Ensure UTF-8 encoding for Chinese
+        r.encoding = 'utf-8'
         data = r.json()
         
         if data.get("status") == "1" and data.get("pois"):
             poi = data["pois"][0]
             
-            # Extract Chinese address components
-            name = poi.get("name", "")  # Venue name in Chinese
-            address = poi.get("address", "")  # Street address in Chinese
-            pname = poi.get("pname", "")  # Province name in Chinese
-            cityname = poi.get("cityname", "")  # City name in Chinese
-            adname = poi.get("adname", "")  # District name in Chinese
+            name = poi.get("name", "")
+            address = poi.get("address", "")
+            pname = poi.get("pname", "")
+            cityname = poi.get("cityname", "")
+            adname = poi.get("adname", "")
             
-            # Build full Chinese address
-            # Format: Name, Province City District Address
             address_parts = []
             if name:
                 address_parts.append(name)
             
-            # Build location string: Province + City + District + Street
             location_parts = []
             if pname:
                 location_parts.append(pname)
-            if cityname and cityname != pname:  # Avoid duplication
+            if cityname and cityname != pname:
                 location_parts.append(cityname)
             if adname:
                 location_parts.append(adname)
@@ -80,7 +82,6 @@ def get_amap_address(keywords: str):
             
             full_address = ", ".join(address_parts) if len(address_parts) > 1 else "".join(address_parts)
             
-            # Get coordinates
             loc_str = poi.get("location")
             if loc_str and full_address:
                 lng_str, lat_str = loc_str.split(",")
@@ -134,7 +135,6 @@ def detect_columns(df: pd.DataFrame):
         if place_col is None and ("景" in col or "点" in col or "店" in col or "name" in col_lower or "地点" in col or "场所" in col):
             place_col = col
     
-    # If still not found, try to use first two columns
     if city_col is None and len(df.columns) >= 1:
         city_col = df.columns[0]
     if place_col is None and len(df.columns) >= 2:
@@ -151,17 +151,12 @@ def process_venue_file(input_path: str, output_dir: str):
     Returns a dictionary with success status and file paths
     """
     try:
-        # Read Excel file
         df = pd.read_excel(input_path)
-        
-        # Detect columns
         city_col, place_col = detect_columns(df)
         
-        # Initialize result lists
         address_list, direct_urls, embed_urls = [], [], []
-        coords_for_kml = []  # Store (lat, lng, name) tuples for KML
+        coords_for_kml = []
         
-        # Process each row
         for idx, row in df.iterrows():
             city = str(row[city_col]).strip()
             place = str(row[place_col]).strip()
@@ -169,23 +164,52 @@ def process_venue_file(input_path: str, output_dir: str):
             
             print(f"Processing: {full_name}")
             
-            # Try Google geocoding first with venue name
-            coord = geocode_google(full_name)
+            google_result = geocode_google(full_name)
             address = ""
             
-            if coord is not None:
-                # Google found it directly
-                print(f"  Found on Google: {coord}")
-                lat, lng = coord
-                direct, embed = build_google_urls(lat, lng)
-                coords_for_kml.append((lat, lng, full_name))
+            if google_result is not None:
+                location_type = google_result['location_type']
+                formatted_address = google_result['formatted_address']
+                
+                # Check if Google's result is reliable
+                is_approximate = (location_type == "APPROXIMATE")
+                venue_in_address = place.lower() in formatted_address.lower()
+                
+                if is_approximate or not venue_in_address:
+                    print(f"  Google result not specific (type: {location_type}, venue in address: {venue_in_address})")
+                    print(f"  Google says: {formatted_address}")
+                    print(f"  Trying Amap for more specific location...")
+                    
+                    amap_result = get_amap_address(full_name)
+                    
+                    if amap_result:
+                        address = amap_result['address']
+                        lat = amap_result['lat']
+                        lng = amap_result['lng']
+                        
+                        print(f"  Found on Amap: {address}")
+                        print(f"  Coordinates: {lat}, {lng}")
+                        
+                        direct, embed = build_google_urls_from_address(address)
+                        coords_for_kml.append((lat, lng, full_name))
+                    else:
+                        print(f"  Amap also failed, using Google's approximate coordinates")
+                        lat = google_result['lat']
+                        lng = google_result['lng']
+                        direct, embed = build_google_urls(lat, lng)
+                        coords_for_kml.append((lat, lng, full_name))
+                else:
+                    print(f"  Found on Google with {location_type} precision")
+                    print(f"  Address: {formatted_address}")
+                    lat = google_result['lat']
+                    lng = google_result['lng']
+                    direct, embed = build_google_urls(lat, lng)
+                    coords_for_kml.append((lat, lng, full_name))
             else:
-                # Google failed, try Amap
                 print(f"  Google failed, trying Amap...")
                 amap_result = get_amap_address(full_name)
                 
                 if amap_result:
-                    # Amap found it - use the ADDRESS for Google Maps URLs
                     address = amap_result['address']
                     lat = amap_result['lat']
                     lng = amap_result['lng']
@@ -193,11 +217,9 @@ def process_venue_file(input_path: str, output_dir: str):
                     print(f"  Found on Amap: {address}")
                     print(f"  Coordinates: {lat}, {lng}")
                     
-                    # Build Google Maps URLs using ADDRESS (not coordinates)
                     direct, embed = build_google_urls_from_address(address)
                     coords_for_kml.append((lat, lng, full_name))
                 else:
-                    # Both failed
                     print(f"  Could not find: {full_name}")
                     direct, embed = "", ""
             
@@ -205,12 +227,10 @@ def process_venue_file(input_path: str, output_dir: str):
             direct_urls.append(direct)
             embed_urls.append(embed)
         
-        # Add new columns to dataframe (no lat/lng, just address)
         df["address"] = address_list
         df["google_direct_url"] = direct_urls
         df["google_embed_url"] = embed_urls
         
-        # Generate output filename
         base_name = os.path.basename(input_path).replace(".xlsx", "").replace(".xls", "")
         excel_filename = f"{base_name}_output.xlsx"
         kml_filename = f"{base_name}.kml"
@@ -218,11 +238,9 @@ def process_venue_file(input_path: str, output_dir: str):
         excel_path = os.path.join(output_dir, excel_filename)
         kml_path = os.path.join(output_dir, kml_filename)
         
-        # Save Excel file
         df.to_excel(excel_path, index=False)
         print(f"Generated: {excel_path}")
         
-        # Generate KML content (only for venues with coordinates)
         placemarks = []
         for lat, lng, name in coords_for_kml:
             placemark = f"""
@@ -242,7 +260,6 @@ def process_venue_file(input_path: str, output_dir: str):
 </kml>
 """
         
-        # Save KML file
         with open(kml_path, "w", encoding="utf-8") as f:
             f.write(kml_content)
         print(f"Generated: {kml_path}")
