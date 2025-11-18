@@ -18,12 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Create directories for uploads and outputs
 RUN mkdir -p downloads
 
 # Expose port (Railway will set PORT env variable)
-ENV PORT=5000
 EXPOSE 5000
 
-# Run the application with gunicorn
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
+# Run the application using startup script
+CMD ["./start.sh"]
