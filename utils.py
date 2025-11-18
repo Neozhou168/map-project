@@ -7,6 +7,51 @@ from urllib.parse import quote
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')
 AMAP_API_KEY = os.environ.get('AMAP_API_KEY', '')
 
+def gcj02_to_wgs84(gcj_lat, gcj_lng):
+    """
+    Convert GCJ-02 coordinates (Amap) to WGS-84 coordinates (Google Maps)
+    
+    GCJ-02 is the coordinate system used by Chinese maps (Amap, Baidu, etc.)
+    WGS-84 is the international GPS standard used by Google Maps
+    
+    The difference can be 50-500 meters, so conversion is important!
+    """
+    import math
+    
+    # Constants for conversion
+    a = 6378245.0  # Semi-major axis of ellipsoid
+    ee = 0.00669342162296594323  # Flattening of ellipsoid
+    
+    def transform_lat(lng, lat):
+        ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
+        ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
+        ret += (20.0 * math.sin(lat * math.pi) + 40.0 * math.sin(lat / 3.0 * math.pi)) * 2.0 / 3.0
+        ret += (160.0 * math.sin(lat / 12.0 * math.pi) + 320 * math.sin(lat * math.pi / 30.0)) * 2.0 / 3.0
+        return ret
+    
+    def transform_lng(lng, lat):
+        ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
+        ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
+        ret += (20.0 * math.sin(lng * math.pi) + 40.0 * math.sin(lng / 3.0 * math.pi)) * 2.0 / 3.0
+        ret += (150.0 * math.sin(lng / 12.0 * math.pi) + 300.0 * math.sin(lng / 30.0 * math.pi)) * 2.0 / 3.0
+        return ret
+    
+    # Convert to radians
+    dlat = transform_lat(gcj_lng - 105.0, gcj_lat - 35.0)
+    dlng = transform_lng(gcj_lng - 105.0, gcj_lat - 35.0)
+    radlat = gcj_lat / 180.0 * math.pi
+    magic = math.sin(radlat)
+    magic = 1 - ee * magic * magic
+    sqrtmagic = math.sqrt(magic)
+    dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * math.pi)
+    dlng = (dlng * 180.0) / (a / sqrtmagic * math.cos(radlat) * math.pi)
+    
+    # Calculate WGS-84 coordinates
+    wgs_lat = gcj_lat - dlat
+    wgs_lng = gcj_lng - dlng
+    
+    return wgs_lat, wgs_lng
+
 def geocode_google(address: str):
     """Use Google Geocoding API to get coordinates and quality info"""
     if not GOOGLE_API_KEY:
@@ -195,14 +240,19 @@ def process_venue_file(input_path: str, output_dir: str):
                     
                     if amap_result:
                         address = amap_result['address']
-                        lat = amap_result['lat']
-                        lng = amap_result['lng']
+                        amap_lat = amap_result['lat']
+                        amap_lng = amap_result['lng']
                         
                         print(f"  Found on Amap: {address}")
-                        print(f"  Coordinates: {lat}, {lng}")
+                        print(f"  Amap coordinates (GCJ-02): {amap_lat}, {amap_lng}")
                         
-                        direct, embed = build_google_urls_from_address(address)
-                        coords_for_kml.append((lat, lng, full_name))
+                        # Convert from GCJ-02 (Amap) to WGS-84 (Google Maps)
+                        google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
+                        print(f"  Google coordinates (WGS-84): {google_lat}, {google_lng}")
+                        
+                        # Use converted coordinates for both Google Maps URLs and KML
+                        direct, embed = build_google_urls(google_lat, google_lng)
+                        coords_for_kml.append((google_lat, google_lng, full_name))
                     else:
                         # Amap also failed - skip this venue entirely
                         print(f"  Amap also failed, skipping this venue (no KML, no URLs)")
@@ -221,14 +271,19 @@ def process_venue_file(input_path: str, output_dir: str):
                 
                 if amap_result:
                     address = amap_result['address']
-                    lat = amap_result['lat']
-                    lng = amap_result['lng']
+                    amap_lat = amap_result['lat']
+                    amap_lng = amap_result['lng']
                     
                     print(f"  Found on Amap: {address}")
-                    print(f"  Coordinates: {lat}, {lng}")
+                    print(f"  Amap coordinates (GCJ-02): {amap_lat}, {amap_lng}")
                     
-                    direct, embed = build_google_urls_from_address(address)
-                    coords_for_kml.append((lat, lng, full_name))
+                    # Convert from GCJ-02 (Amap) to WGS-84 (Google Maps)
+                    google_lat, google_lng = gcj02_to_wgs84(amap_lat, amap_lng)
+                    print(f"  Google coordinates (WGS-84): {google_lat}, {google_lng}")
+                    
+                    # Use converted coordinates for both Google Maps URLs and KML
+                    direct, embed = build_google_urls(google_lat, google_lng)
+                    coords_for_kml.append((google_lat, google_lng, full_name))
                 else:
                     print(f"  Could not find: {full_name}")
                     direct, embed = "", ""
