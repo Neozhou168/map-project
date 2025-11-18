@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Files Ready - Venue Geocoder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .success-icon {
+            text-align: center;
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .download-section {
+            margin-bottom: 30px;
+        }
+        
+        .download-card {
+            background: #f0f4ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-icon {
+            font-size: 32px;
+            margin-right: 15px;
+        }
+        
+        .file-name {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+        
+        .file-description {
+            color: #666;
+            font-size: 13px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            margin-top: 20px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .btn-secondary:hover {
+            background: #f0f4ff;
+        }
+        
+        .info-box {
+            background: #fff9e6;
+            border-left: 4px solid #ffc107;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .info-box h3 {
+            color: #f57c00;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .info-box p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .download-all {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="text-align: center; margin-bottom: 15px;">
+            <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Pandahoho Logo" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+        </div>
+        <div class="success-icon">✅</div>
+        <h1>Files Ready!</h1>
+        <p class="subtitle">Your files have been processed successfully</p>
+        
+        <div class="download-section">
+            <div class="download-card">
+                <div style="display: flex; align-items: center; flex: 1;">
+                    <div class="file-icon">📊</div>
+                    <div class="file-info">
+                        <div class="file-name">{{ excel_file }}</div>
+                        <div class="file-description">Excel file with Google Maps URLs</div>
+                    </div>
+                </div>
+                <a href="/download/{{ excel_path }}" class="btn">Download</a>
+            </div>
+            
+            <div class="download-card">
+                <div style="display: flex; align-items: center; flex: 1;">
+                    <div class="file-icon">🗺️</div>
+                    <div class="file-info">
+                        <div class="file-name">{{ kml_file }}</div>
+                        <div class="file-description">KML file for Google Maps/Earth</div>
+                    </div>
+                </div>
+                <a href="/download/{{ kml_path }}" class="btn">Download</a>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h3>📍 How to use the KML file:</h3>
+            <p>
+                1. Open <strong>Google Maps</strong> or <strong>Google Earth</strong><br>
+                2. Click on the menu (three lines) → <strong>Your places</strong> → <strong>Maps</strong><br>
+                3. Click <strong>Create Map</strong> → <strong>Import</strong><br>
+                4. Upload the KML file to visualize all venues on the map
+            </p>
+        </div>
+        
+        <a href="/" class="btn btn-secondary">Process Another File</a>
+    </div>
+    
+    <script>
+        // Auto-download both files
+        setTimeout(() => {
+            // Small delay to ensure proper download
+        }, 100);
+    </script>
+</body>
+</html>
