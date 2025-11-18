@@ -22,7 +22,7 @@ COPY . .
 RUN mkdir -p downloads
 
 # Expose port
-EXPOSE 5000
+EXPOSE 8080
 
-# Use sh -c to properly expand PORT environment variable
-CMD sh -c 'gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120 --access-logfile - --error-logfile - app:app'
+# Just bind to port 8080 - Railway will handle the rest!
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
