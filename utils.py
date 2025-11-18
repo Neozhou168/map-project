@@ -38,6 +38,7 @@ def geocode_google(address: str):
 def get_amap_address(keywords: str):
     """Use Amap Place Search API to get address and coordinates in Chinese"""
     if not AMAP_API_KEY:
+        print(f"  Amap API key not found!")
         return None
     
     url = "https://restapi.amap.com/v3/place/text"
@@ -53,7 +54,13 @@ def get_amap_address(keywords: str):
         r.encoding = 'utf-8'
         data = r.json()
         
-        if data.get("status") == "1" and data.get("pois"):
+        # Debug: print Amap response status
+        status = data.get("status", "unknown")
+        info = data.get("info", "unknown")
+        count = data.get("count", 0)
+        print(f"  Amap API response: status={status}, info={info}, count={count}")
+        
+        if data.get("status") == "1" and data.get("pois") and len(data.get("pois", [])) > 0:
             poi = data["pois"][0]
             
             name = poi.get("name", "")
@@ -93,8 +100,12 @@ def get_amap_address(keywords: str):
                     'lat': float(lat_str),
                     'lng': float(lng_str)
                 }
+            else:
+                print(f"  Amap: No location or address in result")
+        else:
+            print(f"  Amap: No results found for '{keywords}'")
     except Exception as e:
-        print(f"Amap search error: {e}")
+        print(f"  Amap search error: {e}")
     
     return None
 
@@ -193,11 +204,10 @@ def process_venue_file(input_path: str, output_dir: str):
                         direct, embed = build_google_urls_from_address(address)
                         coords_for_kml.append((lat, lng, full_name))
                     else:
-                        print(f"  Amap also failed, using Google's approximate coordinates")
-                        lat = google_result['lat']
-                        lng = google_result['lng']
-                        direct, embed = build_google_urls(lat, lng)
-                        coords_for_kml.append((lat, lng, full_name))
+                        # Amap also failed - skip this venue entirely
+                        print(f"  Amap also failed, skipping this venue (no KML, no URLs)")
+                        direct, embed = "", ""
+                        # Don't add to coords_for_kml
                 else:
                     print(f"  Found on Google with {location_type} precision")
                     print(f"  Address: {formatted_address}")
