@@ -136,6 +136,19 @@ def build_google_urls_from_address(address: str):
     
     return direct, embed
 
+def build_google_urls_from_place_id(place_id: str):
+    """Generate Direct URL and Embed URL for Google Maps using place_id only (most reliable)"""
+    # Direct URL: Uses place_id directly - Google will show the place with its name
+    direct = f"https://www.google.com/maps/place/?q=place_id:{place_id}"
+    
+    # Embed URL: Uses place_id
+    if GOOGLE_API_KEY:
+        embed = f"https://www.google.com/maps/embed/v1/place?key={GOOGLE_API_KEY}&q=place_id:{place_id}"
+    else:
+        embed = ""
+    
+    return direct, embed
+
 def detect_columns(df: pd.DataFrame):
     """Automatically detect city and place column names"""
     city_col = None
@@ -183,6 +196,7 @@ def process_venue_file(input_path: str, output_dir: str):
             if google_result is not None:
                 location_type = google_result['location_type']
                 formatted_address = google_result['formatted_address']
+                place_id = google_result['place_id']
                 
                 # Only fallback to Amap if Google's result is APPROXIMATE
                 if location_type == "APPROXIMATE":
@@ -218,11 +232,13 @@ def process_venue_file(input_path: str, output_dir: str):
                 else:
                     # Google found it with good precision (ROOFTOP, RANGE_INTERPOLATED, GEOMETRIC_CENTER)
                     print(f"  Found on Google with {location_type} precision")
-                    print(f"  Address: {formatted_address}")
+                    print(f"  Place ID: {place_id}")
                     lat = google_result['lat']
                     lng = google_result['lng']
-                    address = formatted_address
-                    direct, embed = build_google_urls_from_address(formatted_address)
+                    # ADDRESS RULE: Leave address empty when Google is used
+                    address = ""
+                    # Use place_id for URLs (simplest and most reliable format)
+                    direct, embed = build_google_urls_from_place_id(place_id)
                     coords_for_kml.append((lat, lng, full_name))
             else:
                 print(f"  Google failed, trying Amap...")
