@@ -277,15 +277,15 @@ def process_venue_file(input_path: str, output_dir: str):
         # 1. city
         # 2. venue
         # 3. address
-        # 4. google_maps_direct_url
-        # 5. google_maps_embed_url
+        # 4. google_maps_embed_url
+        # 5. google_maps_direct_url
         # ============================================================
         output_df = pd.DataFrame({
             'city': df[city_col],
             'venue': df[place_col],
             'address': address_list,
-            'google_maps_direct_url': direct_urls,
-            'google_maps_embed_url': embed_urls
+            'google_maps_embed_url': embed_urls,
+            'google_maps_direct_url': direct_urls
         })
         
         base_name = os.path.basename(input_path).replace(".xlsx", "").replace(".xls", "")
